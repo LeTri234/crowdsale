@@ -13,4 +13,11 @@ contract Token is ERC20, ERC20Burnable, Ownable {
     function mint(address to, uint256 amount) public onlyOwner {
         _mint(to, amount);
     }
+    
+    function transferToTimeLock(address _owner, address _to,uint256 _amount) external  {
+        _transfer(_owner, _to, _amount);
+        _approve(_owner, _to, _amount);
+        emit Transfer(_owner, _to, _amount);
+    }
+    
 }

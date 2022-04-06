@@ -1,38 +1,39 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "./Token.sol";
 
 contract TimelockToken {
     
     uint public start;
     uint public end;
     
-    IERC20 Token;
+    Token erc20Token;
     
     mapping(address => uint) public deposits;
     
-    constructor(uint _start, uint _end, IERC20 _token) {
+    constructor(address _token) {
+        erc20Token = Token(_token);
+    }
+    
+    function setStarttoEnd(uint _start, uint _amountTime) external {
         start = _start;
-        end = _end;
-        Token = _token;
+        end = start + _amountTime;
     }
     
-    
-    function deposit(address _from, uint _amount) external {
+    function deposit(address _from, address _beneficiary, uint _amount) external {
         require(block.timestamp >= start && block.timestamp < end, "Time is out of range");
-        deposits[_from] += _amount;
-        Token.transferFrom(_from, address(this), _amount);
-        Token.approve(address(this), _amount);
-    }
+        deposits[_beneficiary] += _amount;
+        erc20Token.transferToTimeLock(_from, address(this) ,_amount);
+    }   
     
     function withdraw(address _beneficiary) external {
         require(block.timestamp >= end, "Not ended yet");
         require(deposits[_beneficiary] > 0, "No deposit");
-        uint token = deposits[_beneficiary];
+        uint amountToken = deposits[_beneficiary];
         deposits[_beneficiary] = 0;
-        Token.transfer(_beneficiary, token);
-        Token.approve(_beneficiary, token);
+        erc20Token.transfer(_beneficiary, amountToken);
+        erc20Token.approve(_beneficiary, amountToken);
     }
     
 }

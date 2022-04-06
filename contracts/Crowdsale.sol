@@ -85,6 +85,9 @@ contract Crowdsale is Ownable {
         }
         
         tokenRised += tokens;
+        timelockToken.deposit(erc20Token.owner(), msg.sender, tokens);
+        refundVault.deposit{value: ethPaid}(msg.sender);
+        
     }
     
     function caculateExcessETH() internal returns(uint) {
@@ -153,7 +156,8 @@ contract Crowdsale is Ownable {
     function validatePurchased() private {
         bool hasNotEnd = !hasEnd();
         bool minimumPaid = msg.value >= minimumValue;
-        require(hasNotEnd && minimumPaid, "The purchase has ended");
+        bool timeOut = block.timestamp - buyCoolDown + lastBuy[msg.sender] >= 0;
+        require(hasNotEnd && minimumPaid && timeOut, "Cannot buy token");
     }
     function hasEnd() public view returns(bool){
         return block.timestamp > end || tokenRised >= fundingGoal;
