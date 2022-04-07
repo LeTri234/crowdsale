@@ -6,15 +6,15 @@ import "./TimelockToken.sol";
 import "./RefundVault.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 // 0
-// 3.000.000  --> 1ETH = 50.000 --> 60
+// 3.000.000  --> 1ETH = 50.000 
 
-// 3000.0000  --> 1ETH = 43750 --> 57.2
+// 3000.0000  --> 1ETH = 43750 
 // 5500.0000
 
-// 5500.0000  --> 1ETH = 38.000 --> 65,78
+// 5500.0000  --> 1ETH = 38.000 
 // 8000.0000
 
-// 800.0000  --> 1ETH = 35.000 --> 57,14
+// 800.0000  --> 1ETH = 35.000 
 // 10.000.000
 
 contract Crowdsale is Ownable {
@@ -26,18 +26,18 @@ contract Crowdsale is Ownable {
     uint rate3 = 38_000;
     uint rate4 = 35_000;
     
-    uint limitedTier1 = 3_000_000;
-    uint limitedTier2 = 5_500_000;
-    uint limitedTier3 = 8_500_000;
-    uint limitedTier4 = 10_000_000;
+    uint limitedTier1 = 3000000e18;
+    uint limitedTier2 = 5500000e18;
+    uint limitedTier3 = 8500000e18;
+    uint limitedTier4 = 10000000e18;
     
     uint public start;
     uint public end;
     
     uint public fundingGoal;
     uint public tokenRised;
-    uint public ethRised;
     uint public minimumValue = 0.1 ether;
+    uint public maxEthPaid = 10 ether;
     uint private buyCoolDown = 1 minutes;
     mapping(address => uint) private lastBuy;
     
@@ -47,9 +47,7 @@ contract Crowdsale is Ownable {
     Token erc20Token;
     TimelockToken timelockToken;
     RefundVault refundVault;
-    constructor(address _token, address _timelockToken, address _refundVault, uint _start, uint _end, uint _fundingGoal)  {
-        start = _start;
-        end = _end;
+    constructor(address _token, address _timelockToken, address _refundVault, uint _fundingGoal)  {
         erc20Token = Token(_token);
         isCompleted = false;
         isRefunding = false;      
@@ -58,7 +56,7 @@ contract Crowdsale is Ownable {
         fundingGoal = _fundingGoal;
     }
     
-    function buyToke() external payable {
+    function buyToken() external payable {
         validatePurchased();
         uint ethPaid = caculateExcessETH();
         uint tokens;
@@ -84,10 +82,21 @@ contract Crowdsale is Ownable {
             }
         }
         
-        tokenRised += tokens;
-        timelockToken.deposit(erc20Token.owner(), msg.sender, tokens);
-        refundVault.deposit{value: ethPaid}(msg.sender);
+        if(balances[msg.sender] > 0){
+            balances[msg.sender] += tokens;
+        }else{
+            investors[investorCount] = msg.sender;
+            balances[investors[investorCount]] += tokens;
+            investorCount++;
+        }
         
+        tokenRised += tokens;
+        lastBuy[msg.sender] = block.timestamp;
+    
+        refundVault.deposit{value: ethPaid}(msg.sender);
+        timelockToken.deposit(erc20Token.owner(), msg.sender, tokens);
+        
+        checkCompletedCrowdsale();
     }
     
     function caculateExcessETH() internal returns(uint) {
@@ -108,6 +117,13 @@ contract Crowdsale is Ownable {
         }
         
         return ethPaid;
+    }
+    
+    function setStartToEnd(uint _start, uint _amountTime) public onlyOwner {
+        require(_start > block.timestamp);
+        require(_start + _amountTime > block.timestamp);
+        start = _start;
+        end = start + _amountTime;
     }
     
     function caculateExcessToken(uint _ethPaid, uint _limitTier, uint _rate,uint _tierSelected) internal returns(uint) {
@@ -156,15 +172,71 @@ contract Crowdsale is Ownable {
     function validatePurchased() private {
         bool hasNotEnd = !hasEnd();
         bool minimumPaid = msg.value >= minimumValue;
-        bool timeOut = block.timestamp - buyCoolDown + lastBuy[msg.sender] >= 0;
-        require(hasNotEnd && minimumPaid && timeOut, "Cannot buy token");
+        bool maxPaid = msg.value <= maxEthPaid;
+        bool timeOut = (block.timestamp - (buyCoolDown + lastBuy[msg.sender])) >= 0;
+        require(hasNotEnd && minimumPaid && timeOut && maxPaid, "Cannot buy token");
     }
+    
+    function checkCompletedCrowdsale() public returns(bool) {
+        if(!isCompleted){
+            if(hasEnd() && !reachedGoal()){
+                isRefunding = true;
+                isCompleted = true;
+                refundVault.enableRefund();
+            }else if(hasEnd() && reachedGoal()){
+                isCompleted = true;
+                if(tokenRised < limitedTier4) {
+                    uint tokenBurn = limitedTier4 - tokenRised;
+                    erc20Token.burnExcessTokenAfterSale(erc20Token.owner() ,tokenBurn);
+                }
+            }
+        }
+        return isCompleted;
+    }
+
+    function crowdsaleCompleted() public onlyOwner returns(bool) {
+        require(isCompleted, "Crowdsale is not completed");
+        if(isCompleted && isRefunding){
+            for(uint i = 0; i < investorCount; i++){
+                address account = investors[i];
+                balances[account] = 0;
+                refundVault.refund(account);
+                timelockToken.burnToken(account);
+            }
+            return true;
+        }else if(isCompleted && reachedGoal()){
+            refundVault.close();
+             for(uint i = 0; i < investorCount; i++){
+                address account = investors[i];
+                balances[account] = 0;
+                timelockToken.withdraw(account);
+            }
+            return true;
+        }
+        return false;
+    }
+    
+    function getRemainingTime() external view returns(uint){
+        return end - block.timestamp;
+    }
+
     function hasEnd() public view returns(bool){
         return block.timestamp > end || tokenRised >= fundingGoal;
     }
 
+    function reachedGoal() public view returns(bool){
+        return tokenRised >= fundingGoal;
+    }
+    
+    function getTotalInvestor() public view returns(uint){
+        return investorCount;
+    }
+    
+    function getEthVaultBalance() public view returns(uint){
+        return refundVault.getVaultBalances();
+    }
+    
 }
 
 
-
-
+// 

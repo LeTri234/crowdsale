@@ -12,14 +12,20 @@ async function main() {
   // If this script is run directly using `node` you may want to call compile
   // manually to make sure everything is compiled
   // await hre.run('compile');
-
   // We get the contract to deploy
-  const Greeter = await hre.ethers.getContractFactory("Greeter");
-  const greeter = await Greeter.deploy("Hello, Hardhat!");
+  const account = "0x70997970c51812dc3a010c7d01b50e0d17dc79c8";
+  const Token = await hre.ethers.getContractFactory("Token");
+  const token = await Token.deploy();
+  await token.deployed();
 
-  await greeter.deployed();
+  const TimelockToken = await hre.ethers.getContractFactory("TimelockToken");
+  const timelockToken = await TimelockToken.deploy(token.address);
+  await timelockToken.deployed();
 
-  console.log("Greeter deployed to:", greeter.address);
+  const RefundVault = await hre.ethers.getContractFactory("RefundVault");
+  const vault = await RefundVault.deploy(account);
+  await vault.deployed();
+
 }
 
 // We recommend this pattern to be able to use async/await everywhere

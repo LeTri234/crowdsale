@@ -16,9 +16,8 @@ contract RefundVault is Ownable, ReentrancyGuard {
     event RefundEnabled();
     event Refunded(address indexed beneficiary, uint amount);
     
-    constructor(address _wallet, address _crowdsale) {
+    constructor(address _wallet) {
         require(_wallet != address(0), "Wallet cannot be the zero address");
-        require(_crowdsale != address(0), "Crowdsale cannot be the zero address");
         wallet = _wallet;
         state = VaultState.Active;
     }
