@@ -41,7 +41,6 @@ contract Token is ERC20, ERC20Burnable, Ownable {
 
     function burnTimelockToken(address account, uint amount) external onlyTimelock {
         _burn(account, amount);
-        _spendAllowance(account, address(0), amount);
         } 
     
     function burnExcessTokenAfterSale(address _owner, uint256 _amount) external onlyCrowsale {
